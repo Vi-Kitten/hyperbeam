@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../hyperbeam.js"></script>
+<script>
+
+class Counter extends Component {
+    async onInit(builder) {
+        await builder.linkElement("display");
+        builder.linkAttribute("state", "number");
+        this.render();
+    }
+
+    increment() {
+        this.state += 1;
+        this.render();
+    }
+
+    render() {
+        this.display.hypertext = `<p>${this.state}</p>`;
+    }
+}
+
+hyperbeam.supportClass("counter", Counter);
+
+hyperbeam.start();
+
+</script>
+<style>
+
+body {
+    color: white;
+    background-color: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+button.counter {
+    color: black;
+    background-color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: bolder;
+    width: 2rem;
+    height: 2rem;
+}
+
+component-root.counter {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: row;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+component-field.counter {
+    display: flex-inline;
+    flex-direction: row;
+}
+
+component-field.counter > p {
+    align-self: center;
+    height: fit-content;
+}
+
+</style>
+</head>
+<body lang="en-GB">
+    <component-root class="counter" state="0">
+        <component-field class="counter" name="display"></component-field>
+        <button class="counter" onclick="$(this).increment()">
+            +1
+        </button>
+    </component-root>
+</body>
+</html>
