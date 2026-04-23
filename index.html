@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
+<head>
 <script src="./hyperbeam.js"></script>
 <script>
 
 class Counter extends Component {
-    async init(builder) {
-        console.log("abc");
+    async onInit(builder) {
         await builder.linkElement("display");
         builder.linkAttribute("state", "number");
         this.render();
@@ -13,6 +13,7 @@ class Counter extends Component {
 
     increment() {
         this.state += 1;
+        this.render();
     }
 
     render() {
@@ -21,8 +22,11 @@ class Counter extends Component {
 }
 
 hyperbeam.supportClass("counter", Counter);
-    
+
+hyperbeam.start();
+
 </script>
+</head>
 <body lang="en-GB">
     <component-root class="counter" state="0">
         <button onclick="$(this).increment()">

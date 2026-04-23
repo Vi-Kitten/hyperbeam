@@ -2,15 +2,27 @@
     * HELPERS *
 */
 
+/**
+ * @template {(...args: any[]) => any} F
+ */
 class RunOnce {
-    func = null;
+    /**
+     * @private
+     * @type {F|null}
+     */
+    func;
 
+    /**
+     * @param {F} func 
+     */
     constructor(func) {
         this.func = func;
     }
 
-    // public:
-
+    /**
+     * @param  {...Parameters<F>} args
+     * @returns {ReturnType<F> | void}
+     */
     runOnce(...args) {
         if (this.func !== null) {
             const func = this.func;
@@ -18,14 +30,34 @@ class RunOnce {
             return func(...args);
         }
     }
+
+    /**
+     * @return {boolean}
+     */
+    get hasRun() {
+        return (this.func === null);
+    }
 }
 
+/**
+ * @template T
+ */
 class FutureCell {
+    /**
+     * @private
+     * @type {((_: undefined) => void)[]}
+     */
     requests = [];
+
+    /**
+     * @private
+     * @type {T | undefined}
+     */
     value = undefined;
     
-    // public:
-    
+    /**
+     * @returns {Promise<T>}
+     */
     async get() {
         if (this.value !== undefined) {
             return this.value;
@@ -33,43 +65,86 @@ class FutureCell {
         await new Promise(resolve => {
             this.requests.push(resolve);
         });
+        if (this.value === undefined) {
+            throw new Error("FutureCell cannot store undefined");
+        }
         return this.value;
     }
+
+    /**
+     * @returns {T|null}
+     */
+    tryGet() {
+        return this.value ?? null;
+    }
     
-    expect() {
+    /**
+     * @returns {T}
+     */
+    expect(msg = "FutureCell value not present!") {
         if (this.value === undefined) {
-            throw new Error("FutureCell value not present!");
+            throw new Error(msg);
         }
         return this.value;
     }
     
+    /**
+     * @param {T} val 
+     */
     set(val) {
         this.value = val;
         for (const resolve of this.requests) {
-            resolve();
+            resolve(undefined);
         }
-        this.requests = null;
+        this.requests = [];
     }
 }
 
+/**
+ * @template K
+ * @template V
+ */
 class Mediator {
+    /**
+     * @private
+     * @type {Object<K, FutureCell<V>>}
+     */
     cells = {};
-
-    // public:
     
+    /**
+     * @param {K} key 
+     * @returns {Promise<V>}
+     */
     async get(key) {
         this.cells[key] ??= new FutureCell();
         return await this.cells[key].get();
     }
-    
-    expect(key) {
-        const cell = this.cells[key];
-        if (cell === undefined) {
-            return undefined;
-        }
-        return cell.expect();
+
+    /**
+     * @param {K} key
+     * @returns {V|null} 
+     */
+    tryGet(key) {
+        this.cells[key] ??= new FutureCell();
+        return this.cells[key].tryGet()
     }
     
+    /**
+     * @param {K} key 
+     * @returns {V}
+     */
+    expect(key, msg = `Mediator value ${key} not present!`) {
+        const cell = this.cells[key];
+        if (cell === undefined) {
+            throw new Error(msg);
+        }
+        return cell.expect(msg);
+    }
+    
+    /**
+     * @param {K} key 
+     * @param {V} val 
+     */
     set(key, val) {
         this.cells[key] ??= new FutureCell();
         this.cells[key].set(val);
@@ -77,28 +152,39 @@ class Mediator {
 }
 
 /*
-    * FORWARD DEFINITIONS *
-*/
-
-let View = null;
-
-let Builder = null;
-let Component = null;
-let ComponentRoot = null;
-let ComponentField = null;
-
-/*
     * COORDINATION *
 */
 
-View = class {
-    element = null;
+class View {
+    /**
+     * @type {HTMLElement}
+     */
+    element;
 
+    /**
+     * @param {HTMLElement} elem 
+     */
     constructor(elem) {
         this.element = elem;
     }
 
-    // public:
+    /**
+     * @param {View} view 
+     * @returns {View}
+     */
+    replaceWith(view) {
+        this.element.insertAdjacentElement("afterend", view.element);
+        return this.move();
+    }
+
+    /**
+     * Removes the element from the dom and points to it via move-link hypertext.
+     * 
+     * @returns {string}
+     */
+    preserve() {
+        return MoveLink.target(this.move().element);
+    }
 
     show() {
         this.element.hidden = false;
@@ -108,51 +194,167 @@ View = class {
         this.element.hidden = true;
     }
 
+    /**
+     * Removes the element from the dom, it can be placed back later.
+     * 
+     * @returns {View}
+     */
     move() {
         this.element.remove();
         return this;
     }
 
+    /**
+     * @returns {string}
+     */
     get hypertext() {
         return this.element.outerHTML;
     }
 
+    /**
+     * @param {string} txt 
+     */
     set hypertext(txt) {
         this.element.outerHTML = txt;
     }
 };
 
+/**
+ * A handler informing hyperbeam how to interact with a specific tag.
+ * 
+ * @template {HTMLElement} E
+ * @typedef {Object} Handler
+ * @property {(_: E) => (View)} getView
+ * @property {(_: E) => Promise<void>} untilReady
+ */
+
 const hyperbeam = {
-    componentClasses: new Mediator(),
+    /**
+     * @private
+     * @type {Mediator<string, (root: ComponentRoot) => Component>}
+     */
+    componentFunctions: new Mediator(),
+
+    /**
+     * @private
+     * @type {Object<string, Handler<any>>}
+     */
     elementHandlers: {},
 
-    // public:
+    /**
+     * @private
+     * @type {FutureCell<"started">}
+     */
+    started: new FutureCell(),
 
+    start() {
+        console.log("starting hyperbeam");
+        this.started.set("started");
+    },
+
+    /**
+     * @returns {View}
+     */
+    placeholder() {
+        const placeholder = document.createElement("null-placeholder");
+        placeholder.hidden = true;
+        return this.getView(placeholder);
+    },
+
+    /**
+     * @param {string} htxt
+     * @returns {View}
+     */
+    make(htxt) {
+        const temp = this.placeholder();
+        temp.element.innerHTML = htxt;
+        const child = temp.element.firstElementChild;
+        if (child === null) {
+            throw new Error(`Could not make from hypertext: ${htxt}`);
+        }
+        // should be safe now
+        return this.getView(/** @type {HTMLElement} */ (child));
+    },
+
+    /**
+     * @param {View} v 
+     * @param {View} w 
+     */
+    swap(v, w) {
+        if (v === w) {
+            return;
+        }
+        const temp = this.placeholder();
+        v.replaceWith(temp);
+        w.replaceWith(v);
+        temp.replaceWith(w);
+    },
+
+    /**
+     * Used to find the containing components root, skips components that `elem` is a field of.
+     * 
+     * @param {HTMLElement} elem
+     * @returns {ComponentRoot|undefined}
+     */
     getContainingComponentRoot(elem) {
         var ancestor = elem;
         var nesting = 0;
         while (ancestor !== document.body) {
             if (ancestor.tagName.toLowerCase() === "component-root") {
                 if (nesting == 0) {
-                    return ancestor;
+                    // tag is component-root, cast should be safe
+                    return /** @type {ComponentRoot} */ (ancestor);
                 }
                 nesting -= 1;
             }
-            ancestor = ancestor.parentElement;
+            // cast is safe as we will not continue beyond the body element
+            ancestor = /** @type {HTMLElement} */ (ancestor.parentElement);
             if (ancestor.tagName.toLowerCase() === "component-field") {
                 nesting += 1;
             }
         };
     },
 
+    /**
+     * Support class for custom components.
+     * 
+     * @param {string} name 
+     * @param {new (root: ComponentRoot) => Component} cls 
+     */
     supportClass(name, cls) {
-        this.componentClasses.set(name, cls);
+        this.supportFunction(name, root => new cls(root))
     },
 
+    /**
+     * Support function for custom components.
+     * 
+     * @param {string} name
+     * @param {(root: ComponentRoot) => Component} f
+     */
+    supportFunction(name, f) {
+        this.componentFunctions.set(name, f)
+    },
+
+    /**
+     * Specify how hyperbeam should handle a given HTML tag.
+     * 
+     * @template {HTMLElement} E
+     * @param {string} tag
+     * @param {Handler<E>} handler
+     */
     handleTag(tag, handler) {
+        if (this.started.tryGet() === "started") {
+            throw new Error("Cannot define new tags after hyperbeam start!");
+        }
         this.elementHandlers[tag] = handler;
     },
 
+    /**
+     * Get the view for an HTML element.
+     * 
+     * @param {HTMLElement} elem
+     * @returns {View}
+     */
     getView(elem) {
         const tag = elem.tagName.toLowerCase();
         if (this.elementHandlers[tag]?.getView !== undefined) {
@@ -161,10 +363,14 @@ const hyperbeam = {
         return new View(elem);
     },
 
+    /**
+     * Await the initialisation of an HTML element.
+     * 
+     * *used for components to ensure the document is ready for programatic manipulation*
+     * 
+     * @param {HTMLElement} elem
+     */
     async untilReady(elem) {
-        if (elem === null) {
-            return;
-        }
         const tag = elem.tagName.toLowerCase();
         if (this.elementHandlers[tag]?.untilReady !== undefined) {
             await this.elementHandlers[tag].untilReady(elem);
@@ -176,39 +382,89 @@ const hyperbeam = {
     * MOVEMENT HANDLING *
 */
 
-MoveLink = class extends HTMLElement {
-    // slab data structure for tracking
+/**
+ * A hypertext placeholder tag.
+ */
+class NullPlaceholder extends HTMLElement {}
+
+customElements.define(
+    "null-placeholder",
+    NullPlaceholder
+);
+
+/**
+ * A hypertext tag that overrides itself to move an element when loaded.
+ */
+class MoveLink extends HTMLElement {
     static nextFree = 0;
+
+    /**
+     * @type {(number|HTMLElement)[]}
+     */
     static elements = [];
 
-    // public:
+    /**
+     * @type {HTMLElement|null}
+     */
+    replacement = null;
 
-    static target(elem) {
-        const pos = PlaceElement.nextFree;
-
-        if (MoveLink.elements.length == MoveLink.nextFree) {
-            MoveLink.nextFree += 1;
-            MoveLink.elements.push(elem);
-            return `<move-link hidden target="${pos}"></move-link>`;
-        }
-
-        MoveLink.nextFree = MoveLink.elements[pos];
-        MoveLink.elements[pos] = elem;
-        return `<move-link hidden target="${pos}"></move-link>`;
-    }
-    
-    constructor() {
-        super();
-
-        const pos = this.getAttribute("target");
+    setup = new RunOnce(() => {
+        const pos = Number(this.getAttribute("target"));
         const elem = MoveLink.elements[pos];
         if (typeof elem === "number") {
             throw new Error(`Element ${pos} not in MoveLink.elements!`)
         }
         MoveLink.elements[pos] = MoveLink.nextFree;
         MoveLink.nextFree = pos;
-
         this.replaceWith(elem);
+        this.replacement = elem;
+    });
+
+    /**
+     * Returns hypertext that, when inserted into the document, initiates a move.
+     * 
+     * @param {HTMLElement} elem 
+     * @returns 
+     */
+    static target(elem) {
+        const pos = MoveLink.nextFree;
+        if (MoveLink.elements.length == MoveLink.nextFree) {
+            MoveLink.nextFree += 1;
+            MoveLink.elements.push(elem);
+            return `<move-link hidden target="${pos}"></move-link>`;
+        }
+        if (typeof MoveLink.elements[pos] !== "number") {
+            throw new Error("MoveLink static state corrupted!")
+        }
+        MoveLink.nextFree = MoveLink.elements[pos];
+        MoveLink.elements[pos] = elem;
+        return `<move-link hidden target="${pos}"></move-link>`;
+    }
+    
+    connectedCallback() {
+        this.setup.runOnce()
+    }
+
+    /**
+     * @param {MoveLink} moveLink
+     * @returns {View}
+     */
+    static getView(moveLink) {
+        moveLink.setup.runOnce();
+        if (moveLink.replacement === null) {
+            throw new Error("MoveLink disconnected!");
+        }
+        return hyperbeam.getView(moveLink.replacement);
+    }
+
+    /**
+     * @param {MoveLink} moveLink
+     */
+    static async untilReady(moveLink) {
+        moveLink.setup.runOnce();
+        if (moveLink.replacement !== null) {
+            await hyperbeam.untilReady(moveLink.replacement);
+        }
     }
 };
 
@@ -222,12 +478,20 @@ hyperbeam.handleTag(
     MoveLink
 );
 
-
 /*
     * COMPONENT SYSTEM *
 */
 
+/**
+ * Assuming initialisation, access the containing component.
+ * *for use in event handlers*
+ * 
+ * @param {HTMLElement} elem 
+ * @returns {Component}
+ */
 function $(elem) {
+    hyperbeam.started.expect("Hyperbeam not started!");
+
     const root = hyperbeam.getContainingComponentRoot(elem);
     if (root === undefined) {
         throw new Error(`Element ${elem} is not contained in a component!`);
@@ -235,66 +499,113 @@ function $(elem) {
     return root.component.expect();
 };
 
-Builder = class {
+class Builder {
+    /**
+     * @type {Component}
+     */
+    component;
+
+    /**
+     * @param {Component} component the component being built
+     */
     constructor(component) {
         this.component = component;
     }
 
+    /**
+     * Link a property to an attribute on the component root.
+     * 
+     * @param {string} name 
+     * @param {"boolean"|"number"|"object"|"string"} type 
+     */
     linkAttribute(name, type="string") {
+        const component = this.component;
         switch (type) {
             default:
                 throw new Error(`Type ${type} not supported as an attribute type!`);
             case "boolean":
                 Object.defineProperty(this.component, name, {
+                    /**
+                     * @param {boolean} bool 
+                     */
                     set(bool) {
                         if (bool) {
-                            this.component.element.setAttribute(name, "");
+                            component.element.setAttribute(name, "");
                         } else {
-                            this.component.element.removeAttribute(name);
+                            component.element.removeAttribute(name);
                         }
                     },
+                    /**
+                     * @returns {boolean}
+                     */
                     get() {
-                        return this.component.element.hasAttribute(name);
+                        return component.element.hasAttribute(name);
                     }
                 });
                 break;
             case "number":
                 Object.defineProperty(this.component, name, {
+                    /**
+                     * @param {number} num 
+                     */
                     set(num) {
-                        this.component.element.setAttribute(name, num.toString());
+                        component.element.setAttribute(name, num.toString());
                     },
+                    /**
+                     * @returns {number}
+                     */
                     get() {
-                        return Number(this.component.element.getAttribute(name));
+                        return Number(component.element.getAttribute(name));
                     }
                 });
                 break;
             case "object":
                 Object.defineProperty(this.component, name, {
+                    /**
+                     * @param {object} obj 
+                     */
                     set(obj) {
-                        this.component.element.setAttribute(name, JSON.stringify(obj));
+                        component.element.setAttribute(name, JSON.stringify(obj));
                     },
+                    /**
+                     * @returns {object}
+                     */
                     get() {
-                        return JSON.parse(this.component.element.getAttribute(name));
+                        return JSON.parse(component.element.getAttribute(name) ?? "");
                     }
                 });
                 break;
             case "string":
                 Object.defineProperty(this.component, name, {
+                    /**
+                     * @param {string} str 
+                     */
                     set(str) {
-                        this.component.element.setAttribute(name, str);
+                        component.element.setAttribute(name, str);
                     },
+                    /**
+                     * @returns {string}
+                     */
                     get() {
-                        return this.component.element.getAttribute(name);
+                        return component.element.getAttribute(name) ?? "";
                     }
                 })
                 break;
         }
     }
 
+    /**
+     * Link a property to a field of the component and await the initialisation of its contents.
+     * 
+     * @param {string} name 
+     */
     async linkElement(name) {
         const field = await this.component.element.componentFields.get(name);
         await hyperbeam.untilReady(field);
         Object.defineProperty(this.component, name, {
+            /**
+             * @param {View} view 
+             */
             set(view) {
                 if (view.element.contains(field)) {
                     throw new Error(`Cannot place HTML element ${view} inside of itself.`);
@@ -302,32 +613,122 @@ Builder = class {
                     field.replaceChildren(view.element);
                 }
             },
+            /**
+             * @returns {View}
+             */
             get() {
-                if (field.firstElementChild === undefined) {
-                    return null;
-                } else {
-                    return hyperbeam.getView(field.firstElementChild);
+                // child of HTML element should also be an HTML element
+                const child = /** @type {HTMLElement|null} */ (field.firstElementChild);
+                if (child === null) {
+                    const placeholder = document.createElement("null-placeholder");
+                    placeholder.hidden = true;
+                    field.appendChild(placeholder);
+                    return hyperbeam.getView(placeholder);
                 }
+                return hyperbeam.getView(child);
             }
         });
     }
 }
 
-Component = class extends View {
-    async init(builder) {}
+class Component extends View {
+    /**
+     * @type {ComponentRoot}
+     */
+    element;
+
+    /**
+     * @param {ComponentRoot} root 
+     */
+    constructor(root) {
+        super(root)
+        this.element = root;
+    }
+
+    /**
+     * Initialise the component, linking to attributes and fields located in the document.
+     * 
+     * @param {Builder} builder
+     * @returns {Promise<void>}
+     */
+    async onInit(builder) {
+        const _ = builder
+    }
+
+    /**
+     * Called once the component has been moved to a new location.
+     */
+    async onMove() {}
 };
 
-ComponentRoot = class extends HTMLDivElement {
+class ComponentRoot extends HTMLElement {
+    /**
+     * @type {FutureCell<Component>}
+     */
     component = new FutureCell();
+
+    /**
+     * @type {Mediator<string, ComponentField>}
+     */
     componentFields = new Mediator();
+
     setup = new RunOnce(async () => {
+        await hyperbeam.started.get();
         const className = this.classList[0];
-        const cls = /* if */ (className === undefined)
-            ? /* then */ Component
-            : /* else */ await hyperbeam.componentClasses.get(className);
-        const component = new cls(this);
-        await component.init(new Builder(component));
+        const ctor = /* if */ (className === undefined)
+            ? /* then */ /** @param {ComponentRoot} root */ root => new Component(root)
+            : /* else */ await hyperbeam.componentFunctions.get(className);
+        const component = ctor(this);
+        await component.onInit(new Builder(component));
         this.component.set(component);
+    });
+
+    async connectedCallback() {
+        const component = this.component.tryGet();
+        if (component !== null) {
+            component.onMove()
+        } else {
+            await this.setup.runOnce();
+        }
+    }
+
+    /**
+     * @param {ComponentRoot} root
+     * @returns {View}
+     */
+    static getView(root) {
+        return root.component.expect(`ComponentRoot ${root} not ready!`)
+    }
+
+    /**
+     * @param {ComponentRoot} root
+     */
+    static async untilReady(root) {
+        await root.setup.runOnce();
+    }
+};
+
+customElements.define(
+    "component-root",
+    ComponentRoot
+);
+
+hyperbeam.handleTag(
+    "component-root",
+    ComponentRoot
+);
+
+class ComponentField extends HTMLElement {
+    setup = new RunOnce(async () => {
+        await hyperbeam.started.get();
+        const root = hyperbeam.getContainingComponentRoot(this);
+        if (root === undefined) {
+            throw new Error(`ComponentField ${this} is not contained in a component!`);
+        }
+        const name = this.getAttribute("name");
+        if (name !== null) {
+            root.componentFields.set(name, this);
+        }
     });
     
     async connectedCallback() {
@@ -336,42 +737,6 @@ ComponentRoot = class extends HTMLDivElement {
 };
 
 customElements.define(
-    "component-root",
-    ComponentRoot,
-    { extends: "div" }
-);
-
-hyperbeam.handleTag(
-    "component-root",
-    ComponentRoot
-);
-
-ComponentField = class extends HTMLSpanElement {
-    root = null;
-    name = null;
-    setup = new RunOnce(() => {
-        this.root = hyperbeam.getContainingComponentRoot(this);
-        if (this.root === undefined) {
-            throw new Error(`ComponentField ${this} is not contained in a component!`);
-        }
-        if (this.hasAttribute("name")) {
-            this.name = this.getAttribute("name");
-            this.root.componentFields.set(this.name, this);
-        }
-    });
-    
-    connectedCallback() {
-        this.setup.runOnce();
-    }
-};
-
-customElements.define(
-    "component-field",
-    ComponentField,
-    { extends: "span" }
-);
-
-hyperbeam.handleTag(
     "component-field",
     ComponentField
 );
