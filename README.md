@@ -42,7 +42,7 @@ class Example extends Component {
     }
 }
 
-hyperbeam.supportClass("counter", Counter);
+hyperbeam.supportClass("example", Example);
 
 hyperbeam.start();
 ```
