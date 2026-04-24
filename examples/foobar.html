@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../hyperbeam.js"></script>
+<script>
+
+class Foo extends Component {
+    async onInit(builder) {
+        await builder.linkElement("stuff");
+    }
+
+    switch() {
+        this.hypertext = `
+            <component-root class="bar">
+                <button onclick="$(this).switch()">
+                    Switch!
+                </button>
+                <component-field name="stuff">${
+                    this.stuff.preserve()
+                }</component-field>
+            </component-root>
+        `;
+    }
+}
+
+hyperbeam.supportClass("foo", Foo);
+
+class Bar extends Component {
+    async onInit(builder) {
+        await builder.linkElement("stuff");
+    }
+
+    switch() {
+        this.hypertext = `
+            <component-root class="foo">
+                <button onclick="$(this).switch()">
+                    Switch!
+                </button>
+                <component-field name="stuff">${
+                    this.stuff.preserve()
+                }</component-field>
+            </component-root>
+        `;
+    }
+}
+
+hyperbeam.supportClass("bar", Bar);
+
+class Counter extends Component {
+    async onInit(builder) {
+        await builder.linkElement("display");
+        builder.linkAttribute("state", "number");
+        this.render();
+    }
+
+    increment() {
+        this.state += 1;
+        this.render();
+    }
+
+    render() {
+        this.display.hypertext = `<p>${this.state}</p>`;
+    }
+}
+
+hyperbeam.supportClass("counter", Counter);
+
+hyperbeam.start();
+
+</script>
+<style>
+
+html {
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: black;
+    color: white;
+}
+
+component-root.counter {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: row;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+component-root.foo {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: column;
+    background-color: blue;
+    padding: 1rem;
+    border-radius: 1rem;
+}
+
+component-root.bar {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: column-reverse;
+    background-color: red;
+    padding: 1rem;
+    border-radius: 1rem;
+}
+
+</style>
+</head>
+<body lang="en-GB">
+    <component-root class="foo">
+        <button onclick="$(this).switch()">
+            Switch!
+        </button>
+        <component-field name="stuff">
+            <component-root class="counter" state="0">
+                <component-field name="display"></component-field>
+                <button onclick="$(this).increment()">
+                    +1
+                </button>
+            </component-root>
+        </component-field>
+    </component-root>
+</body>
+</html>
