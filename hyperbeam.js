@@ -294,12 +294,14 @@ const hyperbeam = {
      * Used to find the containing components root, skips components that `elem` is a field of.
      * 
      * @param {HTMLElement} elem
-     * @returns {ComponentRoot|undefined}
+     * @returns {ComponentRoot|null}
      */
     getContainingComponentRoot(elem) {
         var ancestor = elem;
         var nesting = 0;
         while (ancestor !== document.body) {
+            // cast is safe as we will not continue beyond the body element
+            ancestor = /** @type {HTMLElement} */ (ancestor.parentElement);
             if (ancestor.tagName.toLowerCase() === "component-root") {
                 if (nesting == 0) {
                     // tag is component-root, cast should be safe
@@ -307,12 +309,11 @@ const hyperbeam = {
                 }
                 nesting -= 1;
             }
-            // cast is safe as we will not continue beyond the body element
-            ancestor = /** @type {HTMLElement} */ (ancestor.parentElement);
             if (ancestor.tagName.toLowerCase() === "component-field") {
                 nesting += 1;
             }
         };
+        return null;
     },
 
     /**
@@ -493,7 +494,7 @@ function $(elem) {
     hyperbeam.started.expect("Hyperbeam not started!");
 
     const root = hyperbeam.getContainingComponentRoot(elem);
-    if (root === undefined) {
+    if (root === null) {
         throw new Error(`Element ${elem} is not contained in a component!`);
     }
     return root.component.expect();
@@ -722,12 +723,31 @@ class ComponentField extends HTMLElement {
     setup = new RunOnce(async () => {
         await hyperbeam.started.get();
         const root = hyperbeam.getContainingComponentRoot(this);
-        if (root === undefined) {
+        if (root === null) {
             throw new Error(`ComponentField ${this} is not contained in a component!`);
         }
         const name = this.getAttribute("name");
         if (name !== null) {
             root.componentFields.set(name, this);
+        }
+        // styling info
+        const rootClass = root.classList[0];
+        if (rootClass !== undefined) {
+            if (this.classList.contains(rootClass)) {
+                const fieldClasses = this.getAttribute("class");
+                if (fieldClasses === null) {
+                    this.setAttribute("class", rootClass);
+                } else {
+                    this.setAttribute("class", `${rootClass} ${fieldClasses}`);
+                }
+            }
+        }
+        const context = hyperbeam.getContainingComponentRoot(root);
+        if (context !== null) {
+            const contextClass = context.getAttribute("class");
+            if (contextClass !== null) {
+                this.setAttribute("context", contextClass);
+            }
         }
     });
     

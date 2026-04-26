@@ -4,6 +4,12 @@
 <script src="../hyperbeam.js"></script>
 <script>
 
+class Thing extends Component {
+
+}
+
+hyperbeam.supportClass("thing", Thing)
+
 class Foo extends Component {
     async onInit(builder) {
         await builder.linkElement("stuff");
@@ -86,6 +92,16 @@ body {
     color: white;
 }
 
+/* root */
+@scope (component-root.thing) to (component-field > *) { @scope (:scope) to (component-root) {
+
+}}
+
+/* field contents */
+@scope (component-field[context~="thing"] > *) to (component-field > *) { @scope (:scope) to (component-root) {
+
+}}
+
 component-root.counter {
     display: inline-flex;
     align-items: center;
@@ -115,18 +131,20 @@ component-root.bar {
 </style>
 </head>
 <body lang="en-GB">
-    <component-root class="foo">
-        <button onclick="$(this).switch()">
-            Switch!
-        </button>
-        <component-field name="stuff">
-            <component-root class="counter" state="0">
-                <component-field name="display"></component-field>
-                <button onclick="$(this).increment()">
-                    +1
-                </button>
-            </component-root>
-        </component-field>
+    <component-root class="thing">
+        <component-root class="foo">
+            <button onclick="$(this).switch()">
+                Switch!
+            </button>
+            <component-field name="stuff">
+                <component-root class="counter" state="0">
+                    <component-field name="display"></component-field>
+                    <button onclick="$(this).increment()">
+                        +1
+                    </button>
+                </component-root>
+            </component-field>
+        </component-root>
     </component-root>
 </body>
 </html>
