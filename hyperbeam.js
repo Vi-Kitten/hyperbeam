@@ -583,6 +583,11 @@ class HorizontalFocusNavigator extends FocusNavigator {
     bandBottom;
 
     /**
+     * @type {number}
+     */
+    bandCenter;
+
+    /**
      * @type {HTMLElement}
      */
     bandParent;
@@ -592,8 +597,9 @@ class HorizontalFocusNavigator extends FocusNavigator {
      */
     constructor(elem) {
         super();
-        this.bandTop = elem.offsetTop;
-        this.bandBottom = elem.offsetHeight + elem.offsetTop;
+        this.bandTop = elem.offsetTop - elem.offsetHeight * 0.25;
+        this.bandCenter = elem.offsetTop + elem.offsetHeight * 0.5;
+        this.bandBottom = elem.offsetTop + elem.offsetHeight * 1.25;
         this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of a parent") })();
     }
 
@@ -605,9 +611,15 @@ class HorizontalFocusNavigator extends FocusNavigator {
         if (!this.bandParent.contains(elem)) {
             return false;
         }
-        const elemTop = elem.offsetTop;
-        const elemBottom = elem.offsetHeight + elem.offsetTop;
-        return elemBottom > this.bandTop && elemTop < this.bandBottom;
+        
+        const elemTop = elem.offsetTop - elem.offsetHeight * 0.25;
+        const elemCenter = elem.offsetTop + elem.offsetHeight * 0.25;
+        const elemBottom = elem.offsetTop + elem.offsetHeight * 1.25;
+
+        const linkTo = (this.bandTop < elemCenter) && (elemCenter < this.bandBottom);
+        const linkFrom = (elemTop < this.bandCenter) && (this.bandCenter < elemBottom);
+
+        return linkTo && linkFrom;
     }
 
     /**
@@ -693,6 +705,11 @@ class VerticalFocusNavigator extends FocusNavigator {
     bandRight;
 
     /**
+     * @type {number}
+     */
+    bandCenter;
+
+    /**
      * @type {HTMLElement}
      */
     bandParent;
@@ -702,8 +719,9 @@ class VerticalFocusNavigator extends FocusNavigator {
      */
     constructor(elem) {
         super();
-        this.bandLeft = elem.offsetLeft;
-        this.bandRight = elem.offsetWidth + elem.offsetLeft;
+        this.bandLeft = elem.offsetLeft - elem.offsetWidth * 0.25;
+        this.bandCenter = elem.offsetLeft + elem.offsetWidth * 0.5;
+        this.bandRight = elem.offsetLeft + elem.offsetWidth * 1.25;
         this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of a parent") })();
     }
 
@@ -715,9 +733,15 @@ class VerticalFocusNavigator extends FocusNavigator {
         if (!this.bandParent.contains(elem)) {
             return false;
         }
-        const elemLeft = elem.offsetLeft;
-        const elemRight = elem.offsetWidth + elem.offsetLeft;
-        return elemRight > this.bandLeft && elemLeft < this.bandRight;
+
+        const elemLeft = elem.offsetLeft - elem.offsetWidth * 0.25;
+        const elemCenter = elem.offsetLeft + elem.offsetWidth * 0.25;
+        const elemRight = elem.offsetLeft + elem.offsetWidth * 1.25;
+
+        const linkTo = (this.bandLeft < elemCenter) && (elemCenter < this.bandRight);
+        const linkFrom = (elemLeft < this.bandCenter) && (this.bandCenter < elemRight);
+
+        return linkTo && linkFrom;
     }
 
     /**
@@ -841,6 +865,7 @@ document.addEventListener("keydown", event => {
         }
         hyperbeam.navigator = _navigator;
         const navigator = /** @type {HorizontalFocusNavigator} */ (_navigator);
+        event.preventDefault();
 
         /**
          * @type {HTMLElement | null}
@@ -859,6 +884,7 @@ document.addEventListener("keydown", event => {
 
             if (elem.tabIndex === 0) {
                 elem.focus();
+                // event.preventDefault();
                 return;
             }
         }
@@ -873,6 +899,7 @@ document.addEventListener("keydown", event => {
         }
         hyperbeam.navigator = _navigator;
         const navigator = /** @type {VerticalFocusNavigator} */ (_navigator);
+        event.preventDefault();
 
         /**
          * @type {HTMLElement | null}
@@ -891,6 +918,7 @@ document.addEventListener("keydown", event => {
 
             if (elem.tabIndex === 0) {
                 elem.focus();
+                // event.preventDefault();
                 return;
             }
         }
