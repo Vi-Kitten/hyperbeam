@@ -285,6 +285,13 @@ class View {
     }
 
     /**
+     * @returns {View | null}
+     */
+    parent() {
+        return this.ancestor("*");
+    }
+
+    /**
      * Checks if a css selector matches the item.
      * 
      * @param {string} selector
@@ -334,6 +341,17 @@ class View {
  * @property {(_: E) => Promise<void>} untilReady
  */
 
+class FocusNavigator {
+    /**
+     * 
+     * @param {HTMLElement} elem
+     * @returns {boolean} 
+     */
+    supports(elem) {
+        return false;
+    }
+}
+
 const hyperbeam = {
     /**
      * @private
@@ -352,6 +370,22 @@ const hyperbeam = {
      * @type {FutureCell<"started">}
      */
     started: new FutureCell(),
+
+    /**
+     * @private
+     * @type {FocusNavigator}
+     */
+    navigator: new FocusNavigator(),
+
+    /**
+     * @returns {View | null}
+     */
+    focused() {
+        const elem = /** @type {HTMLElement | null} */ (document.querySelector("*:focus"));
+        return /* if */ (elem === null)
+            ? /* then */ null
+            : /* else */ hyperbeam.getView(elem);
+    },
 
     start() {
         console.log("starting hyperbeam");
@@ -515,25 +549,166 @@ const hyperbeam = {
     }
 };
 
-document.addEventListener("keydown", event => {
-    if (event.key !== "Escape") {
+class HorizontalFocusNavigator extends FocusNavigator {
+    /**
+     * @type {number}
+     */
+    bandTop;
+
+    /**
+     * @type {number}
+     */
+    bandBottom;
+
+    /**
+     * @type {HTMLElement}
+     */
+    bandParent;
+
+    /**
+     * @param {HTMLElement} elem
+     */
+    constructor(elem) {
+        super();
+        this.bandTop = elem.offsetTop;
+        this.bandBottom = elem.offsetHeight + elem.offsetTop;
+        this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of parent") })();
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {boolean}
+     */
+    supports(elem) {
+        if (!this.bandParent.contains(elem)) {
+            return false;
+        }
+        const elemTop = elem.offsetTop;
+        const elemBottom = elem.offsetHeight + elem.offsetTop;
+        return elemBottom > this.bandTop && elemTop < this.bandBottom;
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {HTMLElement | null}
+     */
+    right(elem) {
+        if (!this.supports(elem)) {
+            throw new Error("cannot navigate down from unsupported element")
+        }
+        const parent = elem.parentElement;
+        if (parent === null) {
+            return null;
+        }
+        const elemLeft = elem.offsetLeft;
+        var closestLeft = Infinity;
+        var closestSibling = null;
+        for (const _sibling of parent.children) {
+            const sibling = /** @type {HTMLElement} */ (_sibling);
+            const siblingLeft = sibling.offsetLeft;
+            if (siblingLeft <= elemLeft) {
+                continue;
+            }
+            if (siblingLeft < closestLeft) {
+                closestLeft = siblingLeft;
+                closestSibling = sibling;
+            }
+        }
+        return closestSibling;
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {HTMLElement | null}
+     */
+    left(elem) {
+        if (!this.supports(elem)) {
+            throw new Error("cannot navigate down from unsupported element")
+        }
+        const parent = elem.parentElement;
+        if (parent === null) {
+            return null;
+        }
+        const elemLeft = elem.offsetLeft;
+        var closestLeft = Infinity;
+        var closestSibling = null;
+        for (const _sibling of parent.children) {
+            const sibling = /** @type {HTMLElement} */ (_sibling);
+            const siblingLeft = sibling.offsetLeft;
+            if (siblingLeft >= elemLeft) {
+                continue;
+            }
+            if (siblingLeft > closestLeft) {
+                closestLeft = siblingLeft;
+                closestSibling = sibling;
+            }
+        }
+        return closestSibling;
+    }
+}
+
+document.addEventListener("focus", event => {
+    const focus = hyperbeam.focused();
+    if (focus === null) {
         return;
     }
+    if (!hyperbeam.navigator.supports(focus.element)) {
+        hyperbeam.navigator = new FocusNavigator();
+    }
+});
 
-    const elem = /** @type {HTMLElement | null} */ (document.querySelector("*:focus"));
-    var view = /* if */ (elem === null)
-        ? /* then */ null
-        : /* else */ hyperbeam.getView(elem);
-    
-    while (view != null) {
-        view = view?.ancestor?.("*[focus-net]");
-        view?.focus();
-        const elem = /** @type {HTMLElement | null} */ (document.querySelector("*:focus"));
-        if (view !== null && view.element === elem) {
-            return;
+document.addEventListener("keydown", event => {
+    const focus = hyperbeam.focused();
+    if (focus === null) {
+        return;
+    }
+    if (event.key === "Escape") {
+        /**
+         * @type {View | null}
+         */
+        var view = focus;
+
+        while (view != null) {
+            view = view?.ancestor("*[focus-net]");
+            view?.focus();
+            const focus_view = hyperbeam.focused();
+            if (view !== null && view.element === focus_view?.element) {
+                return;
+            }
+        }
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        var _navigator = hyperbeam.navigator;
+        if (!(_navigator instanceof HorizontalFocusNavigator) || !_navigator.supports(focus.element)) {
+            if (focus.parent()?.element?.getAttribute("focus-nav")) {
+                _navigator = new HorizontalFocusNavigator(focus.element);
+            } else {
+                return;
+            }
+        }
+        hyperbeam.navigator = _navigator;
+        const navigator = /** @type {HorizontalFocusNavigator} */ (_navigator);
+
+        /**
+         * @type {HTMLElement | null}
+         */
+        var elem = focus.element;
+        while (elem != null) {
+            if (event.key === "ArrowLeft") {
+                elem = navigator.left(elem)
+            } else if (event.key === "ArrowRight") {
+                elem = navigator.right(elem)
+            }
+
+            if (elem === null) {
+                break;
+            }
+
+            if (elem.tabIndex === 0) {
+                elem.focus();
+                return;
+            }
         }
     }
-
 });
 
 /*
