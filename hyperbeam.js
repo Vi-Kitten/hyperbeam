@@ -613,7 +613,7 @@ class HorizontalFocusNavigator extends FocusNavigator {
         }
         
         const elemTop = elem.offsetTop - elem.offsetHeight * 0.25;
-        const elemCenter = elem.offsetTop + elem.offsetHeight * 0.25;
+        const elemCenter = elem.offsetTop + elem.offsetHeight * 0.5;
         const elemBottom = elem.offsetTop + elem.offsetHeight * 1.25;
 
         const linkTo = (this.bandTop < elemCenter) && (elemCenter < this.bandBottom);
@@ -735,7 +735,7 @@ class VerticalFocusNavigator extends FocusNavigator {
         }
 
         const elemLeft = elem.offsetLeft - elem.offsetWidth * 0.25;
-        const elemCenter = elem.offsetLeft + elem.offsetWidth * 0.25;
+        const elemCenter = elem.offsetLeft + elem.offsetWidth * 0.5;
         const elemRight = elem.offsetLeft + elem.offsetWidth * 1.25;
 
         const linkTo = (this.bandLeft < elemCenter) && (elemCenter < this.bandRight);
