@@ -155,6 +155,36 @@ class Mediator {
     * COORDINATION *
 */
 
+class FocusHandler {
+    /**
+     * @param {KeyboardEvent} event 
+     */
+    onKeyDown(event) {
+        const _ = event;
+    }
+
+    /**
+     * @param {KeyboardEvent} event 
+     */
+    onKeyUp(event) {
+        const _ = event;
+    }
+
+    /**
+     * @param {FocusEvent} event 
+     */
+    onFocus(event) {
+        const _ = event;
+    }
+
+    /**
+     * @param {FocusEvent} event 
+     */
+    onBlur(event) {
+        const _ = event;
+    }
+}
+
 class View {
     /**
      * @type {HTMLElement}
@@ -178,6 +208,21 @@ class View {
     }
 
     /**
+     * @param {FocusHandler} handler 
+     */
+    handleFocus(handler) {
+        this.element.tabIndex = this.element.tabIndex; // Records tabIndex as manually set, thus making it part of the focus system.
+        this.element.addEventListener('keydown', event => handler.onKeyDown(event));
+        this.element.addEventListener('keyup', event => handler.onKeyUp(event));
+        this.element.addEventListener('focus', event => handler.onFocus(event));
+        this.element.addEventListener('blur', event => handler.onBlur(event));
+    }
+
+    focus() {
+        this.element.focus()
+    }
+
+    /**
      * Removes the element from the dom and points to it via move-link hypertext.
      * 
      * @returns {string}
@@ -192,6 +237,67 @@ class View {
 
     hide() {
         this.element.hidden = true;
+    }
+
+    /**
+     * Finds all elements in the document matching a css selector, where this has temporary id `this`.
+     * 
+     * @param {string} selector 
+     * @returns {Array<View>}
+     */
+    selectAll(selector) {
+        const old_id = this.element.id;
+        this.element.id = "this";
+        const selection = hyperbeam.selectAll(selector);
+        this.element.id = old_id;
+        return selection
+    }
+
+    /**
+     * Finds the given element in the document matching selector, or `null` if not uniquely defined, where this has temporary id `this`.
+     * 
+     * @param {string} selector 
+     * @returns {View | null}
+     */
+    select(selector) {
+        const selection = this.selectAll(selector);
+        if (selection.length != 1) {
+            return null;
+        }
+        return selection[0];
+    }
+
+    /**
+     * Finds the closest ancestor matching the selector.
+     * 
+     * @param {string} selector 
+     * @returns {View | null}
+     */
+    ancestor(selector) {
+        const elem = this.element.parentElement?.closest?.(selector);
+        if (elem === null || elem === undefined) {
+            return null;
+        }
+        if (!(elem instanceof HTMLElement)) {
+            throw new Error(`Query ${JSON.stringify(selector)} selects non html elements!`);
+        }
+        return hyperbeam.getView(elem);
+    }
+
+    /**
+     * Checks if a css selector matches the item.
+     * 
+     * @param {string} selector
+     * @returns {boolean} 
+     */
+    matches(selector) {
+        return this.element.matches(selector);
+    }
+
+    *[Symbol.iterator]() {
+        for (const elem of this.element.children) {
+            yield hyperbeam.getView(/** @type {HTMLElement} */ (elem));
+        }
     }
 
     /**
@@ -376,8 +482,59 @@ const hyperbeam = {
         if (this.elementHandlers[tag]?.untilReady !== undefined) {
             await this.elementHandlers[tag].untilReady(elem);
         }
+    },
+
+
+    /**
+     * Finds all elements in the document matching a css selector.
+     * 
+     * @param {string} selector 
+     * @returns {Array<View>}
+     */
+    selectAll(selector) {
+        return [...document.querySelectorAll(selector)].map(elem => {
+            if (!(elem instanceof HTMLElement)) {
+                throw new Error(`Query ${JSON.stringify(selector)} selects non html elements!`);
+            }
+            return this.getView(elem)
+        });
+    },
+
+    /**
+     * Finds the given element matching selector, or `null` if not uniquely defined.
+     * 
+     * @param {string} selector
+     * @retuns {View | null}
+     */
+    select(selector) {
+        const matches = this.selectAll(selector);
+        if (matches.length != 1) {
+            return null;
+        }
+        return matches[0];
     }
 };
+
+document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") {
+        return;
+    }
+
+    const elem = /** @type {HTMLElement | null} */ (document.querySelector("*:focus"));
+    var view = /* if */ (elem === null)
+        ? /* then */ null
+        : /* else */ hyperbeam.getView(elem);
+    
+    while (view != null) {
+        view = view?.ancestor?.("*[focus-net]");
+        view?.focus();
+        const elem = /** @type {HTMLElement | null} */ (document.querySelector("*:focus"));
+        if (view !== null && view.element === elem) {
+            return;
+        }
+    }
+
+});
 
 /*
     * MOVEMENT HANDLING *
@@ -644,6 +801,40 @@ class Component extends View {
     constructor(root) {
         super(root)
         this.element = root;
+    }
+
+    /**
+     * Finds all elements in the component matching a css selector, where this has temporary id `this`.
+     * 
+     * @param {string} query 
+     * @returns {Array<View>}
+     */
+    selectAllInternal(query) {
+        return this.selectAll(query).filter(elem => $(elem.element) === this);
+    }
+
+    /**
+     * Finds the given element in the component matching selector, or `null` if not uniquely defined, where this has temporary id `this`.
+     * 
+     * @param {string} selector 
+     * @returns {View | null}
+     */
+    selectInternal(selector) {
+        const selection = this.selectAllInternal(selector);
+        if (selection.length != 1) {
+            return null;
+        }
+        return selection[0];
+    }
+
+    /**
+     * Gets an element in the component by id.
+     * 
+     * @param {string} id 
+     * @returns {View | null}
+     */
+    find(id) {
+        return this.selectInternal(`#this *[id=${JSON.stringify(id)}]`);
     }
 
     /**
