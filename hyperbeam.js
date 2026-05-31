@@ -1,4 +1,21 @@
 /*
+    * DEBUGGING *
+*/
+
+/**
+ * @param {HTMLElement} elem 
+ * @param {string} msg
+ * @param {string} colour
+ */
+function visualDebug(elem, msg, colour="red") {
+    const old_background = elem.style.backgroundColor;
+    elem.style.backgroundColor = colour;
+    console.log(msg);
+    // breakpoint goes here
+    elem.style.backgroundColor = old_background;
+}
+
+/*
     * HELPERS *
 */
 
@@ -378,6 +395,11 @@ const hyperbeam = {
     navigator: new FocusNavigator(),
 
     /**
+     * @type {Map<HTMLElement, HTMLElement | undefined>}
+     */
+    refocusPoints: new Map(),
+
+    /**
      * @returns {View | null}
      */
     focused() {
@@ -572,7 +594,7 @@ class HorizontalFocusNavigator extends FocusNavigator {
         super();
         this.bandTop = elem.offsetTop;
         this.bandBottom = elem.offsetHeight + elem.offsetTop;
-        this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of parent") })();
+        this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of a parent") })();
     }
 
     /**
@@ -594,7 +616,7 @@ class HorizontalFocusNavigator extends FocusNavigator {
      */
     right(elem) {
         if (!this.supports(elem)) {
-            throw new Error("cannot navigate down from unsupported element")
+            throw new Error("cannot navigate right from unsupported element")
         }
         const parent = elem.parentElement;
         if (parent === null) {
@@ -605,10 +627,16 @@ class HorizontalFocusNavigator extends FocusNavigator {
         var closestSibling = null;
         for (const _sibling of parent.children) {
             const sibling = /** @type {HTMLElement} */ (_sibling);
+
+            if (!this.supports(sibling)) {
+                continue;
+            }
+
             const siblingLeft = sibling.offsetLeft;
             if (siblingLeft <= elemLeft) {
                 continue;
             }
+
             if (siblingLeft < closestLeft) {
                 closestLeft = siblingLeft;
                 closestSibling = sibling;
@@ -623,23 +651,139 @@ class HorizontalFocusNavigator extends FocusNavigator {
      */
     left(elem) {
         if (!this.supports(elem)) {
-            throw new Error("cannot navigate down from unsupported element")
+            throw new Error("cannot navigate left from unsupported element")
         }
         const parent = elem.parentElement;
         if (parent === null) {
             return null;
         }
         const elemLeft = elem.offsetLeft;
-        var closestLeft = Infinity;
+        var closestLeft = -Infinity;
         var closestSibling = null;
         for (const _sibling of parent.children) {
             const sibling = /** @type {HTMLElement} */ (_sibling);
+
+            if (!this.supports(sibling)) {
+                continue;
+            }
+
             const siblingLeft = sibling.offsetLeft;
             if (siblingLeft >= elemLeft) {
                 continue;
             }
+
             if (siblingLeft > closestLeft) {
                 closestLeft = siblingLeft;
+                closestSibling = sibling;
+            }
+        }
+        return closestSibling;
+    }
+}
+
+class VerticalFocusNavigator extends FocusNavigator {
+    /**
+     * @type {number}
+     */
+    bandLeft;
+
+    /**
+     * @type {number}
+     */
+    bandRight;
+
+    /**
+     * @type {HTMLElement}
+     */
+    bandParent;
+
+    /**
+     * @param {HTMLElement} elem
+     */
+    constructor(elem) {
+        super();
+        this.bandLeft = elem.offsetLeft;
+        this.bandRight = elem.offsetWidth + elem.offsetLeft;
+        this.bandParent = elem.parentElement ?? (() => { throw new Error ("Cannot navigate outside of a parent") })();
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {boolean}
+     */
+    supports(elem) {
+        if (!this.bandParent.contains(elem)) {
+            return false;
+        }
+        const elemLeft = elem.offsetLeft;
+        const elemRight = elem.offsetWidth + elem.offsetLeft;
+        return elemRight > this.bandLeft && elemLeft < this.bandRight;
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {HTMLElement | null}
+     */
+    down(elem) {
+        if (!this.supports(elem)) {
+            throw new Error("cannot navigate down from unsupported element")
+        }
+        const parent = elem.parentElement;
+        if (parent === null) {
+            return null;
+        }
+        const elemTop = elem.offsetTop;
+        var closestTop = Infinity;
+        var closestSibling = null;
+        for (const _sibling of parent.children) {
+            const sibling = /** @type {HTMLElement} */ (_sibling);
+
+            if (!this.supports(sibling)) {
+                continue;
+            }
+
+            const siblingTop = sibling.offsetTop;
+            if (siblingTop <= elemTop) {
+                continue;
+            }
+
+            if (siblingTop < closestTop) {
+                closestTop = siblingTop;
+                closestSibling = sibling;
+            }
+        }
+        return closestSibling;
+    }
+
+    /**
+     * @param {HTMLElement} elem 
+     * @returns {HTMLElement | null}
+     */
+    up(elem) {
+        if (!this.supports(elem)) {
+            throw new Error("cannot navigate left from unsupported element")
+        }
+        const parent = elem.parentElement;
+        if (parent === null) {
+            return null;
+        }
+        const elemTop = elem.offsetTop;
+        var closestTop = -Infinity;
+        var closestSibling = null;
+        for (const _sibling of parent.children) {
+            const sibling = /** @type {HTMLElement} */ (_sibling);
+
+            if (!this.supports(sibling)) {
+                continue;
+            }
+
+            const siblingTop = sibling.offsetTop;
+            if (siblingTop >= elemTop) {
+                continue;
+            }
+
+            if (siblingTop > closestTop) {
+                closestTop = siblingTop;
                 closestSibling = sibling;
             }
         }
@@ -662,24 +806,34 @@ document.addEventListener("keydown", event => {
     if (focus === null) {
         return;
     }
-    if (event.key === "Escape") {
-        /**
-         * @type {View | null}
-         */
-        var view = focus;
 
-        while (view != null) {
-            view = view?.ancestor("*[focus-net]");
-            view?.focus();
-            const focus_view = hyperbeam.focused();
-            if (view !== null && view.element === focus_view?.element) {
+    if (event.key === "Escape") {
+        const net = focus.ancestor("*[focus-net]");
+        if (net === null) {
+            return;
+        }
+        net.focus();
+        hyperbeam.refocusPoints.set(net.element, focus.element);
+
+    } if (event.key === "Enter") {
+        if (focus.matches("*[focus-net]")) {
+            const point = hyperbeam.refocusPoints.get(focus.element);
+            if (point !== undefined) {
+                point.focus();
                 return;
+            }
+
+            for (const descendant of focus.selectAll("#this *")) {
+                if (descendant.element.tabIndex >= 0) {
+                    descendant.focus();
+                    return;
+                }
             }
         }
     } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         var _navigator = hyperbeam.navigator;
         if (!(_navigator instanceof HorizontalFocusNavigator) || !_navigator.supports(focus.element)) {
-            if (focus.parent()?.element?.getAttribute("focus-nav")) {
+            if (focus.parent()?.element?.hasAttribute("arrow-nav")) {
                 _navigator = new HorizontalFocusNavigator(focus.element);
             } else {
                 return;
@@ -697,6 +851,38 @@ document.addEventListener("keydown", event => {
                 elem = navigator.left(elem)
             } else if (event.key === "ArrowRight") {
                 elem = navigator.right(elem)
+            }
+
+            if (elem === null) {
+                break;
+            }
+
+            if (elem.tabIndex === 0) {
+                elem.focus();
+                return;
+            }
+        }
+    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        var _navigator = hyperbeam.navigator;
+        if (!(_navigator instanceof VerticalFocusNavigator) || !_navigator.supports(focus.element)) {
+            if (focus.parent()?.element?.hasAttribute("arrow-nav")) {
+                _navigator = new VerticalFocusNavigator(focus.element);
+            } else {
+                return;
+            }
+        }
+        hyperbeam.navigator = _navigator;
+        const navigator = /** @type {VerticalFocusNavigator} */ (_navigator);
+
+        /**
+         * @type {HTMLElement | null}
+         */
+        var elem = focus.element;
+        while (elem != null) {
+            if (event.key === "ArrowUp") {
+                elem = navigator.up(elem)
+            } else if (event.key === "ArrowDown") {
+                elem = navigator.down(elem)
             }
 
             if (elem === null) {
