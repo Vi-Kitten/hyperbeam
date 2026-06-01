@@ -216,6 +216,16 @@ class View {
     }
 
     /**
+     * Removes the element from the dom, it can be placed back later.
+     * 
+     * @returns {View}
+     */
+    move() {
+        this.element.remove();
+        return this;
+    }
+
+    /**
      * @param {View} view 
      * @returns {View}
      */
@@ -325,13 +335,21 @@ class View {
     }
 
     /**
-     * Removes the element from the dom, it can be placed back later.
+     * Appends the element as a child.
      * 
-     * @returns {View}
+     * @param {View} view
      */
-    move() {
-        this.element.remove();
-        return this;
+    append(view) {
+        this.element.appendChild(view.element);
+    }
+
+    /**
+     * Prepends the element as a child.
+     * 
+     * @param {View} view 
+     */
+    prepend(view) {
+        this.element.prepend(view.element);
     }
 
     /**
@@ -1320,13 +1338,6 @@ class ComponentField extends HTMLElement {
                 } else {
                     this.setAttribute("class", `${rootClass} ${fieldClasses}`);
                 }
-            }
-        }
-        const context = hyperbeam.getContainingComponentRoot(root);
-        if (context !== null) {
-            const contextClass = context.getAttribute("class");
-            if (contextClass !== null) {
-                this.setAttribute("context", contextClass);
             }
         }
     });
