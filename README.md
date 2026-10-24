@@ -1,5 +1,7 @@
 # Hyperbeam
 
+**This is now an archive, this approach assumed too much consistency of the runtime, and ultimately was doomed to fail.**
+
 A library for reactive web guis with a focus on placing as much of the functionality and data into the hypertext as possible.
 
 It is a single `.js` file that you can drag into your projects with full inline JSDoc support.
